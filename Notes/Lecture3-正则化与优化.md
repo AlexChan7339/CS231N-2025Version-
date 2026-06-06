@@ -298,15 +298,15 @@
 > $$
 > 
 > - 沿 $x$ 方向：
->  $$
+> $$
 >   \frac{\partial^2 f}{\partial x^2}=2\lambda_1 \quad(\text{很大})
->   $$
+> $$
 >   👉 **非常陡**
 > 
 > - 沿 $y$ 方向：
->  $$
+> $$
 >   \frac{\partial^2 f}{\partial y^2}=2\lambda_2 \quad(\text{很小})
->   $$
+> $$
 >   👉 **非常平**
 > 
 > 这正是**上下方向二阶导数很高，左右方向二阶导数很低**
@@ -993,7 +993,195 @@ Nesterov算法借鉴了动量法的思想，计算$\bigtriangleup W_{(t)i}$时�
 
 ![image-20260201122200650](https://typora3.oss-cn-shanghai.aliyuncs.com/202602011222967.png)
 
-## 7.1-例子
+## 为什么需要偏差校正
+
+单独看一阶矩
+$$
+m_t=\beta m_{t-1}+(1-\beta) g_t
+$$
+
+
+
+展开递推：
+$$
+m_t=(1-\beta)\left(g_t+\beta g_{t-1}+\beta^2 g_{t-2}+\ldots+\beta^{t-1} g_1\right)
+$$
+
+**做一个关键假设（很重要）**
+
+假设梯度是平稳的：
+
+$$
+E\left[g_t\right]=\mu
+$$
+
+
+3 求期望
+
+$$
+E\left[m_t\right]=(1-\beta)\left(\mu+\beta \mu+\beta^2 \mu+\ldots+\beta^{t-1} \mu\right)
+$$
+
+
+提取 $\mu$ ：
+
+$$
+E\left[m_t\right]=\mu(1-\beta)\left(1+\beta+\beta^2+\ldots+\beta^{t-1}\right)
+$$
+
+$$
+1+\beta+\beta^2+\ldots+\beta^{t-1}=\frac{1-\beta^t}{1-\beta}
+$$
+
+
+代入：
+
+$$
+E\left[m_t\right]=\mu(1-\beta) \cdot \frac{1-\beta^t}{1-\beta}
+$$
+
+
+最终结果
+
+$$
+E\left[m_t\right]=\mu\left(1-\beta^t\right)
+$$
+
+
+偏差本质：少了一个因子
+
+理想情况下我们希望：
+
+$$
+E\left[m_t\right]=\mu
+$$
+因此需要将$1-\beta^t$除掉
+$$
+\hat{m}_t = \frac{m_t}{1-\beta^t}
+$$
+
+## 7.1-例子1
+
+假设在 Adam 中，我们有以下超参数和初始条件：
+
+$\beta_1=0.9, \beta_2=0.999, m_0=0, v_0=0$
+
+并且再前两次迭代中，梯度恒定为$dw_1=0.1, dw_2=0.1$
+
+1. 第一次迭代（i=1）
+
+   - 原始一阶矩估计：
+
+     $m_1=\beta_1 \ m_0+(1-\beta_1)dw_1=0.9·0+0.1·0.1=0.01$
+
+   - 原始二阶矩估计
+
+     $v_1=\beta_2v_0+(1-\beta_2)(dw_1)^2=0.999·0+0.001·0.01=0.00001$
+
+   - 注意：由于$m_0=v_0=0$，前期计算得到的$m_1$和$v_1$都偏小
+
+   这时做偏差校正：
+
+   $$
+   \hat{m}_1=\frac{m_1}{1-\beta_1^1}=\frac{0.01}{1-0.9}=\frac{0.01}{0.1}=0.1,
+   $$
+
+
+$$
+   \hat{v}_1=\frac{v_1}{1-\beta_2^1}=\frac{0.00001}{1-0.999}=\frac{0.00001}{0.001}=0.01
+$$
+
+
+   这样校正之后，$\hat{m}_1$ 就等于真实梯度 $d w_1=0.1, \hat{v}_1$ 也接近 $\left(d w_1\right)^2=0.01$ 。
+
+2. 第二次迭代（i = 2 ）
+   - 原始一阶矩估计：
+     $$
+     \begin{aligned}
+     m_2=\beta_1 m_1+\left(1-\beta_1\right) d w_2 & =0.9 \cdot 0.01+0.1 \cdot 0.1 \\
+     & =0.009+0.01=0.019
+     \end{aligned}
+     $$
+     
+   
+   - 原始二阶矩估计：
+     $$
+     \begin{gathered}
+     v_2=\beta_2 v_1+\left(1-\beta_2\right)\left(d w_2\right)^2=0.999 \cdot 0.00001+0.001 \cdot 0.01 \\
+     =0.00000999+0.00001=0.00001999 .
+     \end{gathered}
+     $$
+   
+   - 偏差校正：
+
+$$
+\begin{gathered}
+\hat{m}_2=\frac{m_2}{1-\beta_1^2}=\frac{0.019}{1-0.9^2}=\frac{0.019}{1-0.81}=\frac{0.019}{0.19}=0.1, \\
+\hat{v}_2=\frac{v_2}{1-\beta_2^2}=\frac{0.00001999}{1-0.999^2}=\frac{0.00001999}{1-0.998001}=\frac{0.00001999}{0.001999}=0.01 .
+\end{gathered}
+$$
+
+
+可以看出，经过偏差校正后，无论是第 1 步还是第 2 步，$\hat{m}_i$ 都恢复成了真实梯度 $d w_i=0.1, \hat{v}_i$也恢复成了 $\left(d w_i\right)^2=0.01$ ．
+
+在迭代初期，原始的 $m_i, v_i$ 会因为初始值为零而＂小于＂它们应有的大小；通过除以 $\left(1-\beta_1^i\right)$ 和 $\left(1-\beta_2^i\right)$ 就能＂放大＂这两个量，使其无偏地逼近真实的一阶、二阶矩估计。这就是偏差校正的意义。
+
+下面通过公式进行进一步解释。对 $\hat{m}_3$ 进行展开与约分。
+
+$$
+\begin{aligned}
+m_1 & =\left(1-\beta_1\right) d w_1 \\
+m_2 & =\beta_1 m_1+\left(1-\beta_1\right) d w_2=\beta_1\left(1-\beta_1\right) d w_1+\left(1-\beta_1\right) d w_2, \\
+m_3 & =\beta_1 m_2+\left(1-\beta_1\right) d w_3 \\
+& =\beta_1^2\left(1-\beta_1\right) d w_1+\beta_1\left(1-\beta_1\right) d w_2+\left(1-\beta_1\right) d w_3 .
+\end{aligned}
+$$
+
+
+带入偏差校正公式：
+
+$$
+\hat{m}_3=\frac{m_3}{1-\beta_1^3}=\frac{\beta_1^2\left(1-\beta_1\right) d w_1+\beta_1\left(1-\beta_1\right) d w_2+\left(1-\beta_1\right) d w_3}{1-\beta_1^3} .
+$$
+
+
+提取公因子：
+
+$$
+\begin{aligned}
+\hat{m}_3 & =\frac{\left(1-\beta_1\right)\left(\beta_1^2 d w_1+\beta_1 d w_2+d w_3\right)}{\left(1-\beta_1\right)\left(1+\beta_1+\beta_1^2\right)} \\
+& =\frac{\beta_1^2 d w_1+\beta_1 d w_2+d w_3}{1+\beta_1+\beta_1^2}
+\end{aligned}
+$$
+
+
+最终得到归一化后的加权平均形式：
+
+$$
+\hat{m}_3=\frac{\beta_1^2 d w_1+\beta_1 d w_2+d w_3}{1+\beta_1+\beta_1^2}
+$$
+
+
+同理，$\hat{v}_3$ 约分过程如下：
+
+$$
+\begin{aligned}
+v_1 & =\left(1-\beta_2\right)\left(d w_1\right)^2, \\
+v_2 & =\beta_2 v_1+\left(1-\beta_2\right)\left(d w_2\right)^2=\beta_2\left(1-\beta_2\right)\left(d w_1\right)^2+\left(1-\beta_2\right)\left(d w_2\right)^2, \\
+v_3 & =\beta_2 v_2+\left(1-\beta_2\right)\left(d w_3\right)^2 \\
+& =\beta_2^2\left(1-\beta_2\right)\left(d w_1\right)^2+\beta_2\left(1-\beta_2\right)\left(d w_2\right)^2+\left(1-\beta_2\right)\left(d w_3\right)^2, \\
+\hat{v}_3 & =\frac{v_3}{1-\beta_2^3}=\frac{\beta_2^2\left(1-\beta_2\right)\left(d w_1\right)^2+\beta_2\left(1-\beta_2\right)\left(d w_2\right)^2+\left(1-\beta_2\right)\left(d w_3\right)^2}{1-\beta_2^3} \\
+& =\frac{\left(1-\beta_2\right)\left[\beta_2^2\left(d w_1\right)^2+\beta_2\left(d w_2\right)^2+\left(d w_3\right)^2\right]}{\left(1-\beta_2\right)\left(1+\beta_2+\beta_2^2\right)} \\
+& =\frac{\beta_2^2\left(d w_1\right)^2+\beta_2\left(d w_2\right)^2+\left(d w_3\right)^2}{1+\beta_2+\beta_2^2} .
+\end{aligned}
+$$
+
+
+$$
+\hat{v}_3=\frac{\beta_2^2\left(d w_1\right)^2+\beta_2\left(d w_2\right)^2+\left(d w_3\right)^2}{1+\beta_2+\beta_2^2}
+$$
+
+## 7.2-例子2
 
 - 鞍点：梯度修正项$m_t$会在惯性助力下顺利通过鞍点
 - 缓坡：学习率修正项$V_t$会使目标点加速通过
